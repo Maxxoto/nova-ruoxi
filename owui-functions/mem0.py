@@ -14,6 +14,9 @@ from pydantic import BaseModel
 import json
 from mem0 import Memory
 import threading
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Pipeline:
@@ -23,6 +26,7 @@ class Pipeline:
         store_cycles: Optional[int] = (
             10  # Number of messages from the user before the data is processed and added to the memory
         )
+
         vector_store_qdrant_name: Optional[str] = "nova"
         vector_store_qdrant_url: Optional[str] = "host.docker.internal"
         vector_store_qdrant_port: Optional[int] = 6333
@@ -51,15 +55,15 @@ class Pipeline:
         )
 
     async def on_startup(self):
-        print(f"on_startup:{__name__}")
+        logger.info(f"on_startup:{__name__}")
         pass
 
     async def on_shutdown(self):
-        print(f"on_shutdown:{__name__}")
+        logger.info(f"on_shutdown:{__name__}")
         pass
 
     async def on_valves_updated(self):
-        print(f"on_valves_updated:{__name__}")
+        logger.info(f"on_valves_updated:{__name__}")
         if self.mem_zero:
             self.mem_zero = None  # Reset the memory to force reinitialization
         self.mem_zero = self.init_mem_zero()
@@ -70,18 +74,25 @@ class Pipeline:
         body: dict,
         user: Optional[dict] = None,
     ) -> dict:
-        print(f"pipe:{__name__}")
+        logger.info(f"Initiating memory calling... {__name__}")
 
         store_cycles = self.valves.store_cycles
+
+        logger.info(f"store_cycles: {store_cycles}")
 
         try:
             mem0_user = user.get("id")
         except (TypeError, KeyError):
-            print("Could not retrieve user ID. Using default user.")
+            logger.info("Could not retrieve user ID. Using default user.")
             raise ValueError("User ID is not set")
 
-        if self.API_KEY == "":
+        if self.valves.API_KEY == "":
             raise ValueError("API key is not set")
+
+        if self.mem_zero is None:
+            self.mem_zero = self.init_mem_zero()
+
+        logger.info(f"mem0_user: {mem0_user}")
 
         if isinstance(body, str):
             body = json.loads(body)
@@ -91,34 +102,39 @@ class Pipeline:
 
         self.user_messages.append(last_message)
 
+        # user_messages = [msg for msg in all_messages if msg["role"] == "user"]
+
         if len(self.user_messages) == store_cycles:
             message_text = ""
             for message in self.user_messages:
                 message_text += message + " "
 
             if self.thread and self.thread.is_alive():
-                print("Waiting for previous memory to be done")
+                logger.info("Waiting for previous memory to be done")
                 self.thread.join()
 
             self.thread = threading.Thread(
-                target=self.m.add, kwargs={"data": message_text, "user_id": mem0_user}
+                target=self.mem_zero.add,
+                kwargs={"data": message_text, "user_id": mem0_user},
             )
 
-            print("Text to be processed in to a memory:")
-            print(message_text)
+            logger.info("Text to be processed in to a memory:")
+            logger.info(message_text)
 
             self.thread.start()
             self.user_messages.clear()
 
-        memories = self.m.search(last_message, user_id=mem0_user)
+        memories = self.mem_zero.search(last_message, user_id=mem0_user)
 
         if memories:
-            fetched_memory = memories[0]["memory"]
+            fetched_memory = "\n".join(
+                f"- {entry['memory']}" for entry in memories["results"]
+            )
         else:
             fetched_memory = ""
 
-        print("Memory added to the context:")
-        print(fetched_memory)
+        logger.info("Memory added to the context")
+        logger.info(fetched_memory[:10])
 
         if fetched_memory:
             all_messages.insert(
@@ -130,12 +146,13 @@ class Pipeline:
                 },
             )
 
-        print("Final body to send to the LLM:")
-        print(body)
+        logger.info("Final body to send to the LLM:")
+        # logger.info(body)
 
         return body
 
     def init_mem_zero(self):
+        logger.info("Initializing Mem0")
         config = {
             "vector_store": {
                 "provider": "qdrant",
@@ -160,6 +177,7 @@ class Pipeline:
                 "config": {
                     "model": "text-embedding-3-large",
                     "api_key": self.valves.API_KEY,
+                    "embedding_dims": 3072,
                 },
             },
         }
