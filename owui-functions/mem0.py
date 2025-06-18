@@ -5,7 +5,7 @@ date: 2024-08-23
 version: 1.0
 license: MIT
 description: A filter that processes user messages and stores them as long term memory by utilizing the mem0 framework together with qdrant
-requirements: pydantic,mem0ai
+requirements: pydantic,mem0ai,langchain_neo4j,rank_bm25
 """
 
 import os
@@ -110,7 +110,6 @@ class Pipeline:
 
         logger.info(f"Current messages length : {len(self.user_messages)}")
         logger.info(f"Last message : {last_message[:30]}...{last_message[-30:]}")
-        # user_messages = [msg for msg in all_messages if msg["role"] == "user"]
 
         if len(self.user_messages) == store_cycles:
             message_text = ""
