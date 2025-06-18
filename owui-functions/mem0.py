@@ -32,6 +32,10 @@ class Pipeline:
         vector_store_qdrant_port: Optional[int] = 6333
         API_KEY: Optional[str] = ""  # API key
 
+        graph_url: Optional[str] = ""
+        graph_username: Optional[str] = ""
+        graph_password: Optional[str] = ""
+
     def __init__(self):
         self.type = "filter"
         self.name = "Memory Filter"
@@ -64,9 +68,8 @@ class Pipeline:
 
     async def on_valves_updated(self):
         logger.info(f"on_valves_updated:{__name__}")
-        if self.mem_zero:
-            self.mem_zero = None  # Reset the memory to force reinitialization
-        self.mem_zero = self.init_mem_zero()
+        if not self.mem_zero:
+            self.mem_zero = self.init_mem_zero()
         pass
 
     async def inlet(
@@ -89,7 +92,7 @@ class Pipeline:
         if self.valves.API_KEY == "":
             raise ValueError("API key is not set")
 
-        if self.mem_zero is None:
+        if not self.mem_zero:
             self.mem_zero = self.init_mem_zero()
 
         logger.info(f"mem0_user: {mem0_user}")
@@ -100,8 +103,13 @@ class Pipeline:
         all_messages = body["messages"]
         last_message = all_messages[-1]["content"]
 
-        self.user_messages.append(last_message)
+        # Check if last_message contain </chat_history> if yes then dont append it to the user_messages
+        if "</chat_history>" not in last_message:
+            # Handle for followup question (new openwebui features)
+            self.user_messages.append(last_message)
 
+        logger.info(f"Current messages length : {len(self.user_messages)}")
+        logger.info(f"Last message : {last_message[:30]}...{last_message[-30:]}")
         # user_messages = [msg for msg in all_messages if msg["role"] == "user"]
 
         if len(self.user_messages) == store_cycles:
@@ -115,11 +123,11 @@ class Pipeline:
 
             self.thread = threading.Thread(
                 target=self.mem_zero.add,
-                kwargs={"data": message_text, "user_id": mem0_user},
+                kwargs={"messages": message_text, "user_id": mem0_user},
             )
 
             logger.info("Text to be processed in to a memory:")
-            logger.info(message_text)
+            logger.info(f"{message_text[:30]}...{message_text[-30:]}")
 
             self.thread.start()
             self.user_messages.clear()
@@ -145,9 +153,6 @@ class Pipeline:
                     + str(fetched_memory),
                 },
             )
-
-        logger.info("Final body to send to the LLM:")
-        # logger.info(body)
 
         return body
 
@@ -178,6 +183,14 @@ class Pipeline:
                     "model": "text-embedding-3-large",
                     "api_key": self.valves.API_KEY,
                     "embedding_dims": 3072,
+                },
+            },
+            "graph_store": {
+                "provider": "neo4j",
+                "config": {
+                    "url": self.valves.graph_url,
+                    "username": self.valves.graph_username,
+                    "password": self.valves.graph_password,
                 },
             },
         }
