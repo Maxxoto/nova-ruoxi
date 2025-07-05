@@ -1,3 +1,4 @@
+from backend.nova import get_nova_response
 import streamlit as st
 import sys
 import re
@@ -6,7 +7,6 @@ from pathlib import Path
 # Add project root to path to enable backend imports
 sys.path.append(str(Path(__file__).parent.parent))
 
-from backend.chat_service import get_nova_response
 
 # Initialize session state
 if "messages" not in st.session_state:
@@ -60,9 +60,12 @@ if prompt := st.chat_input("Type your message to Nova..."):
                     )
 
             # Parse response to separate thinking from main answer
-            thinking_match = re.search(r'<think>(.*?)</think>', response, re.DOTALL)
-            thinking_content = thinking_match.group(1).strip() if thinking_match else None
-            main_answer = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL).strip()
+            thinking_match = re.search(
+                r'<think>(.*?)</think>', response, re.DOTALL)
+            thinking_content = thinking_match.group(
+                1).strip() if thinking_match else None
+            main_answer = re.sub(r'<think>.*?</think>', '',
+                                 response, flags=re.DOTALL).strip()
 
             # Update global thinking content
             st.session_state.global_thinking = thinking_content
@@ -71,7 +74,8 @@ if prompt := st.chat_input("Type your message to Nova..."):
             st.markdown(main_answer)
 
             # Add to chat history
-            st.session_state.messages.append({"role": "assistant", "content": main_answer})
+            st.session_state.messages.append(
+                {"role": "assistant", "content": main_answer})
 
         except Exception as e:
             st.error(f"Error getting response: {str(e)}")
