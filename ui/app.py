@@ -66,7 +66,6 @@ if prompt := st.chat_input("Type your message to Nova..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    print(st.session_state)
     # Initiate agent (or retrieve from session state)
     if "ruo_agent_instance" not in st.session_state:
         st.session_state.ruo_agent_instance = RuoAgent()
@@ -124,6 +123,10 @@ if prompt := st.chat_input("Type your message to Nova..."):
             thinking_match = re.search(r"<think>(.*?)</think>", content, re.DOTALL)
             if thinking_match:
                 thinking_content += "\n" + thinking_match.group(1).strip() if thinking_match else None
+
+            second_thinking_match = re.search(r"<thinking>(.*?)</thinking>", content, re.DOTALL)
+            if second_thinking_match:
+                thinking_content += "\n" + second_thinking_match.group(1).strip() if second_thinking_match else None
 
             # For tool use agent (and other non-tool responses)
             main_answer = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()

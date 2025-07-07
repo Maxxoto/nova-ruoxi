@@ -2,7 +2,7 @@ import json
 from typing import Any
 from langchain_core.tools import tool
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, AnyMessage
-
+from backend.utils.logger_config import logger
 
 def summarize_chat_factory(agent):
     @tool
@@ -17,17 +17,17 @@ def summarize_chat_factory(agent):
         """
         summarizer_agent_chain = agent
 
-        print("\n=== SUMMARIZE_CHAT TOOL CALLED ===")
-        print(f"Received {len(messages)} messages to summarize:")
+        logger.info("\n=== SUMMARIZE_CHAT TOOL CALLED ===")
+        logger.info(f"{len(messages)} messages to summarize")
         for i, msg in enumerate(messages):
-            print(f"{i + 1}. [{msg.type}] {msg.content[:50]}...")
+            logger.debug(f"{i + 1}. [{msg.type}] {msg.content[:50]}...")
 
         processed_chat_history = []
         for msg in messages:
             if hasattr(msg, "type") and hasattr(msg, "content"):
                 processed_chat_history.append({"type": msg.type, "content": msg.content})
             else:
-                print(f"Warning: Invalid message format - {msg}")
+                logger.warning(f"Invalid message format - {msg}")
 
         prompt = f"""
             Based on the chat history, please summarize the chat history in a concise way.

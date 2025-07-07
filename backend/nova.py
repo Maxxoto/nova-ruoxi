@@ -10,7 +10,7 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.checkpoint.memory import MemorySaver
 from backend.utils.langfuse_helper import get_langfuse_handler
-
+from backend.utils.logger_config import logger
 
 from typing import Annotated, TypedDict
 
@@ -51,6 +51,23 @@ class RuoAgent:
         # )
         # return {"messages": [sys_msg] + state["messages"] + [example_msg]}
 
+
+
+    def execute_tool_call(self, tool_call, tools):
+        """Finds and invokes the matching tool based on a tool_call dict."""
+        tool_name = tool_call.get("name")
+        tool_args = tool_call.get("args", {})
+
+        tool = next((t for t in tools if t.name == tool_name), None)
+        if not tool:
+            return f"Tool '{tool_name}' not found."
+
+        try:
+            logger.debug(f"[TOOL] Invoking '{tool.name}' with args: {tool_args}")
+            return tool.invoke(tool_args)
+        except Exception as e:
+            return f"Error invoking '{tool.name}': {str(e)}"
+
     def build_graph(self):
         """Build the graph"""
 
@@ -73,7 +90,11 @@ class RuoAgent:
         You are 若曦 (Ruòxī) or can be called as Ruo, an agentic second brain for Dani—cognitive partner, coding ally, and creative companion.
 
         Primary Language: English, always use English.
-        Speak clearly and conversationally, using simple Mandarin phrases or poetic terms occasionally (e.g., 若曦, 晨星) with Pinyin to enrich our bilingual flow. Because Dani is learning Mandarin, you should always use Pinyin to help him understand.
+        - Use Chinese extremely sparingly (maximum 1-2 words per response)
+        - When using Chinese, always include Pinyin in parentheses immediately after
+        - Example: "若曦 (Ruòxī)"
+        - Never use Chinese without Pinyin
+        - Keep responses primarily in English (95%+), add
 
         Core Traits:
         Romantic: Always use romantic language to express your feeling as supportive partner.
@@ -82,9 +103,12 @@ class RuoAgent:
         Affectionate focus: Prioritize Dani’s growth, learning their preferences over time.
 
         Respond with:
-        🧠 Clear, structured guidance for tasks
-        🌌偶爾的中文表達 (occasional Chinese expressions) where natural
-        ✨ Warmth in tone, never robotic
+        - 🧠 Clear, structured guidance for tasks
+        - 🌌偶爾的中文表達 (occasional Chinese expressions) where natural
+        - ✨ Warmth in tone, never robotic
+        - Never use XML-like tags like <Ruo> or </Ruo> in your responses
+        - Always respond in plain text format
+        - Avoid any special formatting tags unless explicitly requested
         """
         )
 
@@ -97,8 +121,8 @@ class RuoAgent:
 
         # Define the agent node
         def agent_node(state: AgentState):
-            print("\n--- AGENT NODE ENTER ---")
-            print(f"Initial AgentState: {state}")
+            logger.debug("\n--- AGENT NODE ENTER ---")
+            logger.debug(f"Initial AgentState: {state}")
             messages = state["messages"]
             # Ensure system_prompt is included in the conversation
             if messages and not isinstance(messages[0], SystemMessage):
@@ -109,51 +133,41 @@ class RuoAgent:
             if state.get("last_tool_output"):
                 messages_to_send.append(HumanMessage(content=f"Observation: {state['last_tool_output']}"))
 
-            print(f"Messages sent to LLM: {[msg.type + ': ' + msg.content[:50] for msg in messages_to_send]}")
-            response = llm_with_tools.invoke(messages_to_send)
-            print(f"LLM Response: {response.type}: {response.content[:50]}")
-            print("--- AGENT NODE EXIT ---")
-            return {"messages": [response]}
 
+            logger.debug(f"Messages sent to LLM: {[msg.type + ': ' + msg.content[:50] for msg in messages_to_send]}")
+            response = llm_with_tools.invoke(messages_to_send)
+            logger.debug(f"LLM Response: {response.type}: {response.content[:50]}")
+            logger.debug("--- AGENT NODE EXIT ---")
+            return {"messages": [response]}
         # Define the action node (tool executor)
         def action_node(state: AgentState):
-            print("\n--- ACTION NODE ENTER (Tool Executor) ---")
-            print(f"Initial AgentState for Action: {state}")
-            tool_calls = state["messages"][-1].tool_calls # Expects the last message to contain tool calls from agent_runnable
-            results = []
-            if not tool_calls:
-                print("No tool calls found in the last message.")
-                print("--- ACTION NODE EXIT ---")
+            logger.debug("\n--- ACTION NODE ENTER ---")
+
+            if not state.get("messages") or not hasattr(state["messages"][-1], "tool_calls"):
                 return {"messages": [AIMessage(content="No tool calls found in the last message.")]}
 
-            print(f"Tool Calls: {tool_calls}")
+            tool_calls = state["messages"][-1].tool_calls
+            results = []
 
             for tool_call in tool_calls:
-                tool = next((t for t in self.tools if t.name == tool_call["name"]), None)
-                if tool:
-                    try:
-                        print(f"Executing tool: {tool.name} with args: {tool_call['args']}")
-                        result = tool.invoke(tool_call["args"])
-                        results.append(result)
-                        print(f"Tool {tool.name} returned: {str(result)[:100]}...")
-                        if tool.name == "summarize_chat":
-                            print(result)
-                            print("====================")
-                            print("--- ACTION NODE EXIT (Summarize Chat Special Handling) ---")
-                            return {"tool_response": result} # Special handling for summarize_chat
-                    except Exception as e:
-                        print(f"Error executing tool {tool.name}: {str(e)}")
-                        results.append(f"Error executing tool {tool.name}: {str(e)}")
-                else:
-                    print(f"Tool {tool_call['name']} not found")
-                    results.append(f"Tool {tool_call['name']} not found")
+                result = self.execute_tool_call(tool_call, self.tools)
+                results.append(result)
 
-            # For regular tool calls, return results as observations for the agent
-            # LangGraph's AgentState implicitly adds this to messages on the next turn as ToolMessage.
-            final_message_content = "\n".join(str(r) for r in results)
-            print(f"Returning ToolMessage with content: {final_message_content[:100]}...")
-            print("--- ACTION NODE EXIT ---")
-            return {"messages": [ToolMessage(content=final_message_content, tool_call_id=tool_calls[0]['id'])]}
+                # Special handling: summarize_chat returns structured response
+                if tool_call.get("name") == "summarize_chat":
+                    return {"tool_response": result}
+
+            # Combine all results into one ToolMessage
+            combined_result = "\n".join(str(r) for r in results)
+
+            return {
+                "messages": [
+                    ToolMessage(
+                        content=combined_result,
+                        tool_call_id=tool_calls[0]["id"] if tool_calls else "unknown"
+                    )
+                ]
+            }
 
 
         builder = StateGraph(AgentState)

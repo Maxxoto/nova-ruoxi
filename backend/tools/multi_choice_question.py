@@ -1,9 +1,9 @@
 from typing import List
 from langchain_core.tools import tool
 from langchain_core.messages import SystemMessage
+from backend.utils.logger_config import logger
 
 from backend.nova import RuoAgent
-
 
 @tool
 def multi_choice_question(summarized_question: str) -> List[str]:
@@ -20,6 +20,6 @@ def multi_choice_question(summarized_question: str) -> List[str]:
 
     response = agent.invoke({"messages": [SystemMessage(content=summarized_question)]})
 
-    print(response)
+    logger.debug(response)
 
     return "This is a multi-choice question."
