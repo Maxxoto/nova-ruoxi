@@ -1,8 +1,8 @@
 import json
-from typing import Any
 from langchain_core.tools import tool
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, AnyMessage
+from langchain_core.messages import SystemMessage, AnyMessage
 from backend.utils.logger_config import logger
+
 
 def summarize_chat_factory(agent):
     @tool

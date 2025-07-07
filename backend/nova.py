@@ -51,8 +51,6 @@ class RuoAgent:
         # )
         # return {"messages": [sys_msg] + state["messages"] + [example_msg]}
 
-
-
     def execute_tool_call(self, tool_call, tools):
         """Finds and invokes the matching tool based on a tool_call dict."""
         tool_name = tool_call.get("name")
@@ -74,13 +72,7 @@ class RuoAgent:
         # Load environment variables from .env file
         API_KEY = os.getenv("GROQ_API_KEY")
         langfuse_handler = get_langfuse_handler()
-        llm = ChatGroq(
-            model="qwen/qwen3-32b",
-            api_key=API_KEY,
-            temperature=0.6,
-            reasoning_format="parsed",
-            callbacks=[langfuse_handler] if langfuse_handler else None
-        )
+        llm = ChatGroq(model="qwen/qwen3-32b", api_key=API_KEY, temperature=0.6, reasoning_format="parsed", callbacks=[langfuse_handler] if langfuse_handler else None)
 
         # System Prompt
         # The system prompt for create_react_agent is often directly provided in the prompt itself,
@@ -133,12 +125,12 @@ class RuoAgent:
             if state.get("last_tool_output"):
                 messages_to_send.append(HumanMessage(content=f"Observation: {state['last_tool_output']}"))
 
-
             logger.debug(f"Messages sent to LLM: {[msg.type + ': ' + msg.content[:50] for msg in messages_to_send]}")
             response = llm_with_tools.invoke(messages_to_send)
             logger.debug(f"LLM Response: {response.type}: {response.content[:50]}")
             logger.debug("--- AGENT NODE EXIT ---")
             return {"messages": [response]}
+
         # Define the action node (tool executor)
         def action_node(state: AgentState):
             logger.debug("\n--- ACTION NODE ENTER ---")
@@ -160,15 +152,7 @@ class RuoAgent:
             # Combine all results into one ToolMessage
             combined_result = "\n".join(str(r) for r in results)
 
-            return {
-                "messages": [
-                    ToolMessage(
-                        content=combined_result,
-                        tool_call_id=tool_calls[0]["id"] if tool_calls else "unknown"
-                    )
-                ]
-            }
-
+            return {"messages": [ToolMessage(content=combined_result, tool_call_id=tool_calls[0]["id"] if tool_calls else "unknown")]}
 
         builder = StateGraph(AgentState)
 
@@ -190,7 +174,7 @@ class RuoAgent:
             route_agent_output,
         )
 
-        builder.add_edge("action","agent")
+        builder.add_edge("action", "agent")
         # builder.add_conditional_edges(
         #     "action",
         #     # If tool_response is present (from summarize_chat), go to END, otherwise go back to agent
@@ -198,7 +182,6 @@ class RuoAgent:
         # )
 
         # Removed the builder.add_edge("assistant", END) as route_agent_output handles it
-
 
         # Compile graph
         graph = builder.compile(checkpointer=memory)
