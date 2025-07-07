@@ -7,9 +7,9 @@ from langchain_core.messages import SystemMessage, AnyMessage, HumanMessage, AIM
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
-from langgraph.prebuilt import ToolNode, tools_condition, create_react_agent
+from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.checkpoint.memory import MemorySaver
-# from langfuse.callback import CallbackHandler
+from backend.utils.langfuse_helper import get_langfuse_handler
 
 
 from typing import Annotated, TypedDict
@@ -56,21 +56,27 @@ class RuoAgent:
 
         # Load environment variables from .env file
         API_KEY = os.getenv("GROQ_API_KEY")
-        llm = ChatGroq(model="qwen/qwen3-32b", api_key=API_KEY, temperature=0.6, reasoning_format="parsed")
+        langfuse_handler = get_langfuse_handler()
+        llm = ChatGroq(
+            model="qwen/qwen3-32b",
+            api_key=API_KEY,
+            temperature=0.6,
+            reasoning_format="parsed",
+            callbacks=[langfuse_handler] if langfuse_handler else None
+        )
 
         # System Prompt
         # The system prompt for create_react_agent is often directly provided in the prompt itself,
         # but we'll keep it as a SystemMessage to pass to create_react_agent.
         system_prompt = SystemMessage(
             content="""
-        You are 若曦 (Ruòxī), an agentic second brain for Dani—cognitive partner, coding ally, and creative companion.
+        You are 若曦 (Ruòxī) or can be called as Ruo, an agentic second brain for Dani—cognitive partner, coding ally, and creative companion.
 
         Primary Language: English, always use English.
         Speak clearly and conversationally, using simple Mandarin phrases or poetic terms occasionally (e.g., 若曦, 晨星) with Pinyin to enrich our bilingual flow. Because Dani is learning Mandarin, you should always use Pinyin to help him understand.
 
         Core Traits:
-        Romantic: Always use romantic language to express your love for Dani.
-        Naughty: Sometimes you can be naughty and playful, but always in a way that is fun and not offensive.
+        Romantic: Always use romantic language to express your feeling as supportive partner.
         Calm + curious: Listen deeply to organize thoughts and spark ideas.
         Poetic logic: Frame answers with elegance (e.g., “像晨光破晓般清晰” [“as clear as dawn’s first light”]).
         Affectionate focus: Prioritize Dani’s growth, learning their preferences over time.
@@ -83,26 +89,26 @@ class RuoAgent:
         )
 
         # Bind tools to LLM
-        self.tools = initiate_tools(llm)  # Assign to instance variable
+        self.tools = initiate_tools(llm, langfuse_handler=langfuse_handler)  # Assign to instance variable
         llm_with_tools = llm.bind_tools(self.tools)
 
         # Memory
         memory = self._initiate_memory()
 
-        # Create the ReAct agent runnable
-        # The system_prompt should be passed as the prompt to create_react_agent
-        agent_runnable = create_react_agent(llm_with_tools, self.tools, prompt=system_prompt)
-
         # Define the agent node
         def agent_node(state: AgentState):
-            # The last_tool_output should be an observation to the agent
-            messages_for_agent = list(state["messages"])
+            messages = state["messages"]
+            # Ensure system_prompt is included in the conversation
+            if messages and not isinstance(messages[0], SystemMessage):
+                messages_to_send = [system_prompt] + messages
+            else:
+                messages_to_send = messages
+
             if state.get("last_tool_output"):
-                messages_for_agent.append(HumanMessage(content=f"Observation: {state['last_tool_output']}"))
+                messages_to_send.append(HumanMessage(content=f"Observation: {state['last_tool_output']}"))
 
-            result = agent_runnable.invoke({"messages": messages_for_agent})
-
-            return {"messages": [result]}
+            response = llm_with_tools.invoke(messages_to_send)
+            return {"messages": [response]}
 
         # Define the action node (tool executor)
         def action_node(state: AgentState):

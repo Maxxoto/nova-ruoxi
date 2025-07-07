@@ -11,9 +11,13 @@
 from backend.tools import summarize_chat
 
 
-def initiate_tools(agent):
-    """Initiate tools"""
+def initiate_tools(agent, langfuse_handler=None):
+    """Initiate tools
 
+    Args:
+        agent: The agent to use for tool execution
+        langfuse_handler: Optional Langfuse callback handler for tracing
+    """
     summarize_chat_tool = summarize_chat.summarize_chat_factory(agent)
 
     tools = [summarize_chat_tool]

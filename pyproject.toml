@@ -11,6 +11,8 @@ dependencies = [
     "langgraph>=0.5.1",
     "streamlit>=1.46.1",
     "watchdog>=6.0.0",
+    "langfuse",
+    "langchain>=0.3.26",
 ]
 [tool.ruff]
 line-length = 200
