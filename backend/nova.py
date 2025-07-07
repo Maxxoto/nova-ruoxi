@@ -97,6 +97,8 @@ class RuoAgent:
 
         # Define the agent node
         def agent_node(state: AgentState):
+            print("\n--- AGENT NODE ENTER ---")
+            print(f"Initial AgentState: {state}")
             messages = state["messages"]
             # Ensure system_prompt is included in the conversation
             if messages and not isinstance(messages[0], SystemMessage):
@@ -107,36 +109,51 @@ class RuoAgent:
             if state.get("last_tool_output"):
                 messages_to_send.append(HumanMessage(content=f"Observation: {state['last_tool_output']}"))
 
+            print(f"Messages sent to LLM: {[msg.type + ': ' + msg.content[:50] for msg in messages_to_send]}")
             response = llm_with_tools.invoke(messages_to_send)
+            print(f"LLM Response: {response.type}: {response.content[:50]}")
+            print("--- AGENT NODE EXIT ---")
             return {"messages": [response]}
 
         # Define the action node (tool executor)
         def action_node(state: AgentState):
-            print("\n=== ACTION NODE (Tool Executor) ===")
-            print(f"Tool input state: {state}")
+            print("\n--- ACTION NODE ENTER (Tool Executor) ---")
+            print(f"Initial AgentState for Action: {state}")
             tool_calls = state["messages"][-1].tool_calls # Expects the last message to contain tool calls from agent_runnable
             results = []
             if not tool_calls:
+                print("No tool calls found in the last message.")
+                print("--- ACTION NODE EXIT ---")
                 return {"messages": [AIMessage(content="No tool calls found in the last message.")]}
+
+            print(f"Tool Calls: {tool_calls}")
 
             for tool_call in tool_calls:
                 tool = next((t for t in self.tools if t.name == tool_call["name"]), None)
                 if tool:
                     try:
+                        print(f"Executing tool: {tool.name} with args: {tool_call['args']}")
                         result = tool.invoke(tool_call["args"])
                         results.append(result)
+                        print(f"Tool {tool.name} returned: {str(result)[:100]}...")
                         if tool.name == "summarize_chat":
                             print(result)
                             print("====================")
+                            print("--- ACTION NODE EXIT (Summarize Chat Special Handling) ---")
                             return {"tool_response": result} # Special handling for summarize_chat
                     except Exception as e:
+                        print(f"Error executing tool {tool.name}: {str(e)}")
                         results.append(f"Error executing tool {tool.name}: {str(e)}")
                 else:
+                    print(f"Tool {tool_call['name']} not found")
                     results.append(f"Tool {tool_call['name']} not found")
 
             # For regular tool calls, return results as observations for the agent
             # LangGraph's AgentState implicitly adds this to messages on the next turn as ToolMessage.
-            return {"messages": [ToolMessage(content="\n".join(str(r) for r in results), tool_call_id=tool_calls[0]['id'])]}
+            final_message_content = "\n".join(str(r) for r in results)
+            print(f"Returning ToolMessage with content: {final_message_content[:100]}...")
+            print("--- ACTION NODE EXIT ---")
+            return {"messages": [ToolMessage(content=final_message_content, tool_call_id=tool_calls[0]['id'])]}
 
 
         builder = StateGraph(AgentState)
@@ -159,11 +176,12 @@ class RuoAgent:
             route_agent_output,
         )
 
-        builder.add_conditional_edges(
-            "action",
-            # If tool_response is present (from summarize_chat), go to END, otherwise go back to agent
-            lambda state: END if state.get("tool_response") else "agent",
-        )
+        builder.add_edge("action","agent")
+        # builder.add_conditional_edges(
+        #     "action",
+        #     # If tool_response is present (from summarize_chat), go to END, otherwise go back to agent
+        #     lambda state: END if state.get("tool_response") else "agent",
+        # )
 
         # Removed the builder.add_edge("assistant", END) as route_agent_output handles it
 
