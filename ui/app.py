@@ -66,8 +66,11 @@ if prompt := st.chat_input("Type your message to Nova..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Initiate agent
-    ruo_agent_instance = RuoAgent()
+    print(st.session_state)
+    # Initiate agent (or retrieve from session state)
+    if "ruo_agent_instance" not in st.session_state:
+        st.session_state.ruo_agent_instance = RuoAgent()
+    ruo_agent_instance = st.session_state.ruo_agent_instance
     agent = ruo_agent_instance.agent
 
     # Display assistant response
@@ -86,7 +89,8 @@ if prompt := st.chat_input("Type your message to Nova..."):
             else:
                 with st.spinner("Nova is thinking..."):
                     # Get response from backend service
-                    response = agent.invoke({"messages": prompt}, config={"configurable": {"thread_id": "2"}})
+                    # Using a fixed thread_id for now, can be made dynamic if multiple threads are needed
+                    response = agent.invoke({"messages": prompt}, config={"configurable": {"thread_id": "default_thread"}})
 
             # If response is a direct tool output (like from summarize_chat)
             if isinstance(response, str):
@@ -117,9 +121,9 @@ if prompt := st.chat_input("Type your message to Nova..."):
             # Directly pass the full response object to format_response
             content = format_response(response)
 
-            if thinking_content is None:
-                thinking_match = re.search(r"<think>(.*?)</think>", content, re.DOTALL)
-                thinking_content = thinking_match.group(1).strip() if thinking_match else None
+            thinking_match = re.search(r"<think>(.*?)</think>", content, re.DOTALL)
+            if thinking_match:
+                thinking_content += "\n" + thinking_match.group(1).strip() if thinking_match else None
 
             # For tool use agent (and other non-tool responses)
             main_answer = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
