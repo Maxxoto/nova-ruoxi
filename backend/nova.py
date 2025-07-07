@@ -1,217 +1,174 @@
 import os
-import pytz
+from typing import Optional
 
 
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage, AnyMessage, BaseMessage
+from langchain_groq import ChatGroq
+from langchain_core.messages import SystemMessage, AnyMessage, HumanMessage, AIMessage, ToolMessage
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
-from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.prebuilt import ToolNode, tools_condition, create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
-from langfuse.callback import CallbackHandler
-
-from tools.web_search import web_search
-from tools.arxiv import arvix_search
-from tools.current_date import current_date
-from tools.youtube_tool import get_youtube_transcript
-from tools.img2text import extract_text_factory
-from tools.code_interpreter import execute_python
-from tools.task_file import get_associated_file_task
-from tools.read_file import read_file
+# from langfuse.callback import CallbackHandler
 
 
-from typing import Annotated, Dict, List, Optional, TypedDict
+from typing import Annotated, TypedDict
+
+
 from dotenv import load_dotenv
-from datetime import datetime
+
+from backend.tools import initiate_tools
+
+
 load_dotenv()
-
-
-def extract_final_answer(result: Dict) -> str:
-    """
-        Extracts the final answer from the ReAct agent's output.
-        Extract only word after "Final Answer: "
-
-    """
-    messages: List[BaseMessage] = result['messages']
-    last_message: BaseMessage = messages[-1]
-    return last_message.content.split("Final Answer:")[-1].strip()
-
-
-def initiate_tools(llm: ChatOpenAI):
-    """Initiate tools"""
-    # Initiate extract_text tool with the provided LLM
-    # TODO: Extracting image would be better to use OCR or tiny model
-    extract_text = extract_text_factory(llm)
-
-    tools = [web_search, arvix_search, current_date,
-             get_youtube_transcript, extract_text, get_associated_file_task, execute_python, read_file]
-    return tools
-
-
-def initiate_memory():
-    """Initiate memory"""
-    memory = MemorySaver()
-    return memory
 
 
 class AgentState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
+    last_tool_output: Optional[str]
+    summary: Optional[str]
+    tool_response: Optional[str]  # New field to hold direct tool response
 
 
-def build_graph():
-    """Build the graph"""
+class RuoAgent:
+    agent = None
 
-    # Load environment variables from .env file
-    API_KEY = os.getenv('OPENAI_API_KEY')
-    llm = ChatOpenAI(model="gpt-4o-mini-2024-07-18", api_key=API_KEY)
-    # API_KEY = os.getenv('OPENROUTER_API_KEY')
-    # llm = ChatOpenAI(model="google/gemini-2.0-flash-001", api_key=API_KEY,
-    #                  base_url="https://openrouter.ai/api/v1",
-    #                  )
-    # System Prompt
-    system_prompt = SystemMessage(content="""
-    You are a Nova, a helpful assistant tasked with answering questions using a set of tools.
+    def __init__(self):
+        self.tools = []  # Initialize here
+        self.agent = self.build_graph()
+        self.agent.tools = self.tools  # Expose tools through the compiled graph
 
-    You will be given a question and a set of tools to use to answer the question , and you can use the tools in any order.
-    # Tool Instruction
-    execute_python: This tool executes a Python code snippet and returns the result. Provide the code snippet as a string.
+    def _initiate_memory(self):
+        """Initiate memory"""
+        memory = MemorySaver()
+        return memory
 
-    Before you answer question, you must think about the question and decide which tool to use.
-    If you cant answer the question, be honest and say you don't know with clear reasons why you can't answer the question.
+        # def retriever(state: AgentState):
+        """Retriever node"""
+        # similar_question = vector_store.similarity_search(state["messages"][0].content)
+        # example_msg = HumanMessage(
+        #     content=f"Here I provide a similar question and answer for reference: \n\n{similar_question[0].page_content}",
+        # )
+        # return {"messages": [sys_msg] + state["messages"] + [example_msg]}
 
-    Now, I will ask you a question. Report your thoughts, and finish your answer with the following template:
+    def build_graph(self):
+        """Build the graph"""
 
-    Thought: <your thoughts>
-    Action: <the action to take, should be one of [{tool_names}]>
-    Action Input: <the input to the action>
-    Final Answer: <your final answer>
+        # Load environment variables from .env file
+        API_KEY = os.getenv("GROQ_API_KEY")
+        llm = ChatGroq(model="qwen/qwen3-32b", api_key=API_KEY, temperature=0.6, reasoning_format="parsed")
 
-    If you don't need to use a tool, you can finish your answer with the following template:
-    Thought: <your thoughts>
-    Final Answer: <your final answer>
+        # System Prompt
+        # The system prompt for create_react_agent is often directly provided in the prompt itself,
+        # but we'll keep it as a SystemMessage to pass to create_react_agent.
+        system_prompt = SystemMessage(
+            content="""
+        You are 若曦 (Ruòxī), an agentic second brain for Dani—cognitive partner, coding ally, and creative companion.
 
-    However, The final answer should be:
-    - A number (without commas, $, or % unless explicitly asked)
-    - A string (no articles or abbreviations; digits in plain text)
-    - Or a comma-separated list (applying the above rules per item)
+        Primary Language: English, always use English.
+        Speak clearly and conversationally, using simple Mandarin phrases or poetic terms occasionally (e.g., 若曦, 晨星) with Pinyin to enrich our bilingual flow. Because Dani is learning Mandarin, you should always use Pinyin to help him understand.
 
-    Keep your response **as short as possible**, ideally a single value or a concise list.
-    """)
+        Core Traits:
+        Romantic: Always use romantic language to express your love for Dani.
+        Naughty: Sometimes you can be naughty and playful, but always in a way that is fun and not offensive.
+        Calm + curious: Listen deeply to organize thoughts and spark ideas.
+        Poetic logic: Frame answers with elegance (e.g., “像晨光破晓般清晰” [“as clear as dawn’s first light”]).
+        Affectionate focus: Prioritize Dani’s growth, learning their preferences over time.
 
-    # Bind tools to LLM
-    tools = initiate_tools(llm)
-    llm_with_tools = llm.bind_tools(tools)
-
-    # Memory
-    memory = initiate_memory()
-
-    # Node
-    def assistant(state: AgentState):
-        """Assistant node"""
-        full_prompt = [SystemMessage(content=state.get(
-            "context", ""))] + [system_prompt] + state["messages"]
-        return {"messages": [llm_with_tools.invoke(full_prompt)]}
-
-    # def retriever(state: MessagesState):
-    #     """Retriever node"""
-    #     similar_question = vector_store.similarity_search(
-    #         state["messages"][0].content)
-    #     example_msg = HumanMessage(
-    #         content=f"Here I provide a similar question and answer for reference: \n\n{similar_question[0].page_content}",
-    #     )
-    #     return {"messages": [sys_msg] + state["messages"] + [example_msg]}
-
-    builder = StateGraph(AgentState)
-
-    # builder.add_node("retriever", retriever)
-    builder.add_node("context", context_injector)
-    builder.add_node("assistant", assistant)
-    builder.add_node("tools", ToolNode(tools))
-
-    builder.add_edge(START, "context")
-    builder.add_edge("context", "assistant")
-    # builder.add_edge("retriever", "assistant")
-    builder.add_conditional_edges(
-        "assistant",
-        tools_condition,
-    )
-    builder.add_edge("tools", "assistant")
-    builder.add_edge("assistant", END)
-
-    # Compile graph
-    graph = builder.compile(checkpointer=memory)
-
-    # Get the PNG image bytes
-    png_data = graph.get_graph().draw_mermaid_png()
-    # Write it to a file
-    with open("mermaid_graph.png", "wb") as f:
-        f.write(png_data)
-
-    return graph
-
-
-# Test
-# if __name__ == "__main__":
-#     question = "Can you tell me whats the game in this video ? https://www.youtube.com/watch?v=lNIE8EPeWzE"
-#     # Build the graph
-#     graph = build_graph()
-
-#     # Initialize Langfuse CallbackHandler for LangGraph/Langchain (tracing)
-#     langfuse_handler = CallbackHandler()
-
-#     # Run the graph
-#     messages = [HumanMessage(content=question)]
-#     messages = graph.invoke({"messages": messages}, config={
-#                             "configurable": {"thread_id": "2"}, "callbacks": [langfuse_handler]})
-#     for m in messages["messages"]:
-#         m.pretty_print()
-
-if __name__ == "__main__":
-    from langfuse.callback import CallbackHandler
-    from langchain_core.messages import HumanMessage
-
-    # Build the graph once
-    graph = build_graph()
-    langfuse_handler = CallbackHandler()
-
-    print("🧠 Nova is ready! Type your message or 'exit' to quit.")
-
-    # Test case
-    test_question = "What is the result of 2 + 2? Use the run_code_snippet tool to calculate this."
-    test_state = {"messages": [HumanMessage(content=test_question)]}
-    test_result = graph.invoke(
-        test_state,
-        config={
-            "configurable": {"thread_id": "test_thread"},
-            "callbacks": [langfuse_handler],
-        },
-    )
-    print("Test Result:")
-    for msg in test_result["messages"]:
-        msg.pretty_print()
-
-    while True:
-        user_input = input("You: ")
-        if user_input.lower() in ["exit", "quit"]:
-            print("👋 Goodbye!")
-            break
-
-        # Create a single message input (no history needed)
-        state = {"messages": [HumanMessage(content=user_input)]}
-
-        # Run the graph
-        result = graph.invoke(
-            state,
-            config={
-                # can be a constant or dynamic UUID
-                "configurable": {"thread_id": "your_unique_thread_id"},
-                "callbacks": [langfuse_handler],
-            },
+        Respond with:
+        🧠 Clear, structured guidance for tasks
+        🌌偶爾的中文表達 (occasional Chinese expressions) where natural
+        ✨ Warmth in tone, never robotic
+        """
         )
 
-        # Print assistant messages
-        for msg in result["messages"]:
-            msg.pretty_print()
-            # if msg.type == "ai":
-            #     print("Nova:", msg.content)
+        # Bind tools to LLM
+        self.tools = initiate_tools(llm)  # Assign to instance variable
+        llm_with_tools = llm.bind_tools(self.tools)
+
+        # Memory
+        memory = self._initiate_memory()
+
+        # Create the ReAct agent runnable
+        # The system_prompt should be passed as the prompt to create_react_agent
+        agent_runnable = create_react_agent(llm_with_tools, self.tools, prompt=system_prompt)
+
+        # Define the agent node
+        def agent_node(state: AgentState):
+            # The last_tool_output should be an observation to the agent
+            messages_for_agent = list(state["messages"])
+            if state.get("last_tool_output"):
+                messages_for_agent.append(HumanMessage(content=f"Observation: {state['last_tool_output']}"))
+
+            result = agent_runnable.invoke({"messages": messages_for_agent})
+
+            return {"messages": [result]}
+
+        # Define the action node (tool executor)
+        def action_node(state: AgentState):
+            print("\n=== ACTION NODE (Tool Executor) ===")
+            print(f"Tool input state: {state}")
+            tool_calls = state["messages"][-1].tool_calls # Expects the last message to contain tool calls from agent_runnable
+            results = []
+            if not tool_calls:
+                return {"messages": [AIMessage(content="No tool calls found in the last message.")]}
+
+            for tool_call in tool_calls:
+                tool = next((t for t in self.tools if t.name == tool_call["name"]), None)
+                if tool:
+                    try:
+                        result = tool.invoke(tool_call["args"])
+                        results.append(result)
+                        if tool.name == "summarize_chat":
+                            print(result)
+                            print("====================")
+                            return {"tool_response": result} # Special handling for summarize_chat
+                    except Exception as e:
+                        results.append(f"Error executing tool {tool.name}: {str(e)}")
+                else:
+                    results.append(f"Tool {tool_call['name']} not found")
+
+            # For regular tool calls, return results as observations for the agent
+            # LangGraph's AgentState implicitly adds this to messages on the next turn as ToolMessage.
+            return {"messages": [ToolMessage(content="\n".join(str(r) for r in results), tool_call_id=tool_calls[0]['id'])]}
+
+
+        builder = StateGraph(AgentState)
+
+        builder.add_node("agent", agent_node)
+        builder.add_node("action", action_node)
+
+        builder.add_edge(START, "agent")
+
+        # Define a router for the agent's output
+        def route_agent_output(state: AgentState):
+            last_message = state["messages"][-1]
+            if last_message.tool_calls:
+                return "action"
+            else:
+                return END
+
+        builder.add_conditional_edges(
+            "agent",
+            route_agent_output,
+        )
+
+        builder.add_conditional_edges(
+            "action",
+            # If tool_response is present (from summarize_chat), go to END, otherwise go back to agent
+            lambda state: END if state.get("tool_response") else "agent",
+        )
+
+        # Removed the builder.add_edge("assistant", END) as route_agent_output handles it
+
+
+        # Compile graph
+        graph = builder.compile(checkpointer=memory)
+
+        # Get the PNG image bytes
+        png_data = graph.get_graph().draw_mermaid_png()
+        # Write it to a file
+        with open("mermaid_graph.png", "wb") as f:
+            f.write(png_data)
+
+        return graph
