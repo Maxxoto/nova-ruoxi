@@ -31,9 +31,17 @@ class Pipeline:
         vector_store_qdrant_port: Optional[int] = 6333
         API_KEY: Optional[str] = ""  # API key
 
+        use_knowledge_graph: Optional[bool] = False
         graph_url: Optional[str] = ""
         graph_username: Optional[str] = ""
         graph_password: Optional[str] = ""
+
+        force_user: Optional[bool] = False
+        force_user_id: Optional[str] = ""
+        embedder_provider: Optional[str] = "openai"
+        embedder_model: Optional[str] = "text-embedding-3-small"
+        embedder_api_key: Optional[str] = ""
+        embedder_dims: Optional[int] = 1536
 
     def __init__(self):
         self.type = "filter"
@@ -50,6 +58,16 @@ class Pipeline:
                 "vector_store_qdrant_port": os.getenv("VECTOR_STORE_QDRANT_PORT", 6333),
                 "API_KEY": os.getenv("API_KEY", "your-openai-api-key"),
                 "store_cycles": os.getenv("STORE_CYCLES", 10),
+                "graph_url": os.getenv("GRAPH_URL", ""),
+                "graph_username": os.getenv("GRAPH_USERNAME", ""),
+                "graph_password": os.getenv("GRAPH_PASSWORD", ""),
+                "use_knowledge_graph": os.getenv("USE_KNOWLEDGE_GRAPH", "False").lower() == "true",
+                "force_user": os.getenv("FORCE_USER", "False").lower() == "true",
+                "force_user_id": os.getenv("FORCE_USER_ID", ""),
+                "embedder_provider": os.getenv("EMBEDDER_PROVIDER", "openai"),
+                "embedder_model": os.getenv("EMBEDDER_MODEL", "text-embedding-3-small"),
+                "embedder_api_key": os.getenv("EMBEDDER_API_KEY", ""),
+                "embedder_dims": os.getenv("EMBEDDER_DIMS", 1536),
             }
         )
 
@@ -78,11 +96,14 @@ class Pipeline:
 
         logger.info(f"store_cycles: {store_cycles}")
 
-        try:
-            mem0_user = user.get("id")
-        except (TypeError, KeyError):
-            logger.info("Could not retrieve user ID. Using default user.")
-            raise ValueError("User ID is not set")
+        if self.valves.force_user:
+            mem0_user = self.valves.force_user_id
+        else:
+            try:
+                mem0_user = user.get("id")
+            except (TypeError, KeyError):
+                logger.info("Could not retrieve user ID. Using default user.")
+                raise ValueError("User ID is not set")
 
         if self.valves.API_KEY == "":
             raise ValueError("API key is not set")
@@ -169,21 +190,23 @@ class Pipeline:
                 },
             },
             "embedder": {
-                "provider": "openai",
+                "provider": self.valves.embedder_provider,
                 "config": {
-                    "model": "text-embedding-3-small",
-                    "api_key": self.valves.API_KEY,
-                    "embedding_dims": 1536,
+                    "model": self.valves.embedder_model,
+                    "api_key": self.valves.embedder_api_key if self.valves.embedder_provider == "openai" else "",
+                    "embedding_dims": self.valves.embedder_dims,
                 },
             },
-            # "graph_store": {
-            #     "provider": "neo4j",
-            #     "config": {
-            #         "url": self.valves.graph_url,
-            #         "username": self.valves.graph_username,
-            #         "password": self.valves.graph_password,
-            #     },
-            # },
         }
+
+        if self.valves.use_knowledge_graph:
+            config["graph_store"] = {
+                "provider": "neo4j",
+                "config": {
+                    "url": self.valves.graph_url,
+                    "username": self.valves.graph_username,
+                    "password": self.valves.graph_password,
+                },
+            }
 
         return Memory.from_config(config)
