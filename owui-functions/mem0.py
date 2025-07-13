@@ -5,7 +5,7 @@ date: 2024-08-23
 version: 1.0
 license: MIT
 description: A filter that processes user messages and stores them as long term memory by utilizing the mem0 framework together with qdrant
-requirements: pydantic,mem0ai,langchain_neo4j,rank_bm25
+requirements: pydantic==2.7.4,mem0ai,langchain_neo4j,rank_bm25
 """
 
 import os
@@ -23,9 +23,8 @@ class Pipeline:
     class Valves(BaseModel):
         pipelines: List[str] = []
         priority: int = 0
-        store_cycles: Optional[int] = (
-            10  # Number of messages from the user before the data is processed and added to the memory
-        )
+        # Number of messages from the user before the data is processed and added to the memory
+        store_cycles: Optional[int] = 10
 
         vector_store_qdrant_name: Optional[str] = "nova"
         vector_store_qdrant_url: Optional[str] = "host.docker.internal"
@@ -46,12 +45,8 @@ class Pipeline:
         self.valves = self.Valves(
             **{
                 "pipelines": ["*"],  # Connect to all pipelines
-                "vector_store_qdrant_name": os.getenv(
-                    "VECTOR_STORE_QDRANT_NAME", "memories"
-                ),
-                "vector_store_qdrant_url": os.getenv(
-                    "VECTOR_STORE_QDRANT_URL", "172.17.0.1"
-                ),
+                "vector_store_qdrant_name": os.getenv("VECTOR_STORE_QDRANT_NAME", "nova"),
+                "vector_store_qdrant_url": os.getenv("VECTOR_STORE_QDRANT_URL", "172.17.0.1"),
                 "vector_store_qdrant_port": os.getenv("VECTOR_STORE_QDRANT_PORT", 6333),
                 "API_KEY": os.getenv("API_KEY", "your-openai-api-key"),
                 "store_cycles": os.getenv("STORE_CYCLES", 10),
@@ -134,9 +129,7 @@ class Pipeline:
         memories = self.mem_zero.search(last_message, user_id=mem0_user)
 
         if memories:
-            fetched_memory = "\n".join(
-                f"- {entry['memory']}" for entry in memories["results"]
-            )
+            fetched_memory = "\n".join(f"- {entry['memory']}" for entry in memories["results"])
         else:
             fetched_memory = ""
 
@@ -148,8 +141,7 @@ class Pipeline:
                 0,
                 {
                     "role": "system",
-                    "content": "This is your inner voice talking, you remember this about the person you chatting with "
-                    + str(fetched_memory),
+                    "content": "This is your inner voice talking, you remember this about the person you chatting with " + str(fetched_memory),
                 },
             )
 
@@ -164,7 +156,7 @@ class Pipeline:
                     "collection_name": self.valves.vector_store_qdrant_name,
                     "host": self.valves.vector_store_qdrant_url,
                     "port": self.valves.vector_store_qdrant_port,
-                    "embedding_model_dims": 3072,  # Default dimension for text-embedding-3-large
+                    "embedding_model_dims": 1536,
                 },
             },
             "llm": {
@@ -179,19 +171,19 @@ class Pipeline:
             "embedder": {
                 "provider": "openai",
                 "config": {
-                    "model": "text-embedding-3-large",
+                    "model": "text-embedding-3-small",
                     "api_key": self.valves.API_KEY,
-                    "embedding_dims": 3072,
+                    "embedding_dims": 1536,
                 },
             },
-            "graph_store": {
-                "provider": "neo4j",
-                "config": {
-                    "url": self.valves.graph_url,
-                    "username": self.valves.graph_username,
-                    "password": self.valves.graph_password,
-                },
-            },
+            # "graph_store": {
+            #     "provider": "neo4j",
+            #     "config": {
+            #         "url": self.valves.graph_url,
+            #         "username": self.valves.graph_username,
+            #         "password": self.valves.graph_password,
+            #     },
+            # },
         }
 
         return Memory.from_config(config)
