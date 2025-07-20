@@ -1,5 +1,6 @@
 ## 🗺️ Feature Roadmap
 
+
 Nova / 若曦 is evolving steadily toward becoming a deeply personalized, agentic second brain. Below is a categorized roadmap outlining current progress and future features.
 
 ---

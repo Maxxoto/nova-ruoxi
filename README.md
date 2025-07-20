@@ -1,5 +1,9 @@
 # 🌌 Nova / 若曦 (*Ruòxī*, “Morning Star”)
 **Your Personal Agentic AI Second Brain**
+<div style="text-align:center">
+
+<img src="assets/ruoxi.png" alt="Ruoxi" style="border-radius:50%; width:200px">
+</div>
 
 Nova, also known as 若曦 (*Ruòxī*), is a bilingual, agentic AI assistant designed to help you think, learn, create, and grow. She’s not just a chatbot — she’s your cognitive partner, coding buddy, knowledge curator, and digital companion.
 
@@ -7,9 +11,34 @@ Nova, also known as 若曦 (*Ruòxī*), is a bilingual, agentic AI assistant des
 
 ## ✨ Overview
 
-Built on top of **[OpenWebUI](https://github.com/open-webui/open-webui)** and powered by **Qwen3-235B-A22B**, Nova features intelligent model routing, persistent memory, adaptive personas, and long-term personalization through her **Memory & Cognitive Profile (MCP)** system.
+Powered by **Qwen3-32B**, Nova features intelligent model routing, persistent memory, adaptive personas, and long-term personalization through her **Memory & Persona** system.
 
 She understands both English and 中文 and adapts to a growing range of tasks — from deep reasoning to creative brainstorming.
+
+---
+
+## 🚀 Development Progress
+
+### ✅ Phase 1 (Completed)
+- [x] 🧠 Ruoxi personality
+- [x] 🌐 Bilingual English/Chinese support
+- [x] 💬 Short-term conversation memory
+- [x] 🧩 Basic personalization memory
+- [ ] 📚 Document ingestion and retrieval system
+- [ ] ⚙️ Modular technical architecture
+
+### 🛠️ Phase 2 (In Development)
+- [ ] 📅 Task management agent
+- [ ] 📖 Documentation Q&A agent
+- [ ] 🔍 Research assistant agent
+- [ ] ✉️ Email processing agent
+- [ ] ✈️ Travel planner agent
+- [ ] 💰 Finance tracking agent
+
+### 🔮 Phase 3 (Planned)
+- [ ] 🎙️ Voice interaction system
+- [ ] 👁️ Vision capabilities
+- [ ] 🖼️ Advanced knowledge visualization
 
 ---
 
@@ -58,16 +87,16 @@ Nova operates as a flexible, multi-role assistant:
 
 ---
 
-## 🔀 Model Routing (via OpenRouter + Groq)
+## 🔀 Model Routing (LiteLLM Integration)
 
 Nova routes tasks to different models depending on complexity and context:
 
 | Task Type             | Primary Model                | Fallback / API Provider    |
 |-----------------------|------------------------------ |----------------------------|
 | General reasoning     | Qwen3-32B (OpenRouter)        | LLaMA 4 Maverick (Groq)    |
-| Code generation       | DeepSeek V3                   | — (OpenRouter)             |
-| Planning & reasoning  | Gemini 2.5 Flash              | — (OpenRouter/Google AI Studio) |
-| Complex tasks         | -                             | — (OpenRouter)             |
+| Code generation       | DeepSeek V3                   | — (OpenRor)             |
+| Planning & reasoning  | Deepseek R1 / Gemini 2.5 Flash              | — (OpenRouter/Google AI Studio) |
+| Complex tasks         | -                 ****            | — (OpenRouter)             |
 
 > 🔌 Powered by **Groq** and **OpenRouter** for fast, reliable access to top-tier models.
 
@@ -98,10 +127,10 @@ Nova's Ruoxi persona features adaptive personality traits, a robust personalizat
 
 | Component        | Technology / Service                              |
 |------------------|---------------------------------------------------|
-| UI Layer         | [OpenWebUI](https://github.com/open-webui/open-webui) |
-| Core Model       | Qwen3-235B-A22B                                   |
-| Routing Models   | DeepSeek R1 / Coder V3 / Claude 4 / LLaMA 4       |
-| Embedding DB     | ChromaDB (for general purpose) / Qdrant (for RAG) |
+| UI Layer         | Streamlit (Python) |
+| Core Model       | Qwen3-32B                                   |
+| Routing Models   | Coming Soon :zap:|
+| Embedding DB     | Qdrant (for RAG) |
 | Backend API      | FastAPI *(for orchestration & plugin extensions)* |
 | Voice / Audio    | HyperVoice / Cartesia (TTS)                       |
 | STT & Vision     | Qwen2.5 VL (Vision)                               |
