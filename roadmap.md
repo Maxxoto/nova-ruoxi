@@ -5,26 +5,32 @@ Nova / 若曦 is evolving steadily toward becoming a deeply personalized, agenti
 ---
 
 ### ✅ Phase 1: Core Ruoxi Persona Foundation (In Progress)
-
 **Conversational Core**
-✔️ Dynamic role prompting with Ruoxi personality
-✔️ Bilingual support (English + 中文)
+
+    - Dynamic role prompting with Ruoxi personality \
+    - Bilingual support (English + 中文)
 
 **Ruoxi Persona System**
-✔️ Configurable personality traits (Calm, Curious, Empathetic)
-✔️ Short-term conversation memory
-✔️ **Personalization Memory Pipeline (using Mem0)**:
+
+    - Configurable personality traits (Calm, Curious, Empathetic)
+    - Short-term conversation memory
+
+**Personalization Memory Pipeline (using Mem0)**:
+
     - Basic long-term preference tracking
     - Adaptive responses based on traits and memory
-✔️ **Personal RAG System (using Qdrant with Hybrid Search)**:
+
+**Personal RAG System (using Qdrant with Hybrid Search)**
+
     - Document ingestion (documentation, files, etc.)
     - Process: Ingest & Chunk -> Embed -> Hybrid Search with Qdrant
     - Simple retrieval for personalized knowledge
 
 **Technical Foundation**
-✔️ Embedding storage using Qdrant (for RAG data)
-✔️ Optional FastAPI backend
-✔️ Modular architecture for future expansion
+
+    - Embedding storage using Qdrant (for RAG data)
+    - Optional FastAPI backend
+    - Modular architecture for future expansion
 
 ### 🔜 Phase 2:Agentic Behavior & Specialized Agents
 
