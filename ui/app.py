@@ -10,8 +10,8 @@ from backend.utils.response_formatter import format_response, format_chat_histor
 # Add project root to path to enable backend imports
 sys.path.append(str(Path(__file__).parent.parent))
 
-from backend.nova import RuoAgent
 
+from backend.nova import RuoAgent
 
 # Initialize session state
 if "messages" not in st.session_state:
