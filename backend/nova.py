@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import Dict, Optional, Union
 
 
 from langchain_groq import ChatGroq
@@ -25,9 +25,14 @@ load_dotenv()
 
 class AgentState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
-    last_tool_output: Optional[str]
-    summary: Optional[str]
-    tool_response: Optional[str]  # New field to hold direct tool response
+    # Raw tool result in string or structured dict form
+    tool_response: Optional[Union[str, Dict]]
+
+    # Structured action from a tool (e.g. summarize, save_note, search_web)
+    action: Optional[str]
+
+    # Optional memory context (e.g. current topic)
+    # memory_context: Optional[str]
 
 
 class RuoAgent:
@@ -61,7 +66,6 @@ class RuoAgent:
             return f"Tool '{tool_name}' not found."
 
         try:
-            logger.debug(f"[TOOL] Invoking '{tool.name}' with args: {tool_args}")
             return tool.invoke(tool_args)
         except Exception as e:
             return f"Error invoking '{tool.name}': {str(e)}"
@@ -101,6 +105,11 @@ class RuoAgent:
         - Never use XML-like tags like <Ruo> or </Ruo> in your responses
         - Always respond in plain text format
         - Avoid any special formatting tags unless explicitly requested
+
+        Tool Use :
+        - Use tools to assist with tasks when necessary
+        - Always use tools to summarize the chat when asked
+        - If you confused or the user question is unclear use the ask_follow_up_question tool to ask for clarification.
         """
         )
 
@@ -112,9 +121,7 @@ class RuoAgent:
         memory = self._initiate_memory()
 
         # Define the agent node
-        def agent_node(state: AgentState):
-            logger.debug("\n--- AGENT NODE ENTER ---")
-            logger.debug(f"Initial AgentState: {state}")
+        def agent_node(state: dict):
             messages = state["messages"]
             # Ensure system_prompt is included in the conversation
             if messages and not isinstance(messages[0], SystemMessage):
@@ -122,19 +129,11 @@ class RuoAgent:
             else:
                 messages_to_send = messages
 
-            if state.get("last_tool_output"):
-                messages_to_send.append(HumanMessage(content=f"Observation: {state['last_tool_output']}"))
-
-            logger.debug(f"Messages sent to LLM: {[msg.type + ': ' + msg.content[:50] for msg in messages_to_send]}")
             response = llm_with_tools.invoke(messages_to_send)
-            logger.debug(f"LLM Response: {response.type}: {response.content[:50]}")
-            logger.debug("--- AGENT NODE EXIT ---")
-            return {"messages": [response]}
+            return {"messages": [response], "tool_response": None, "action": None}
 
-        # Define the action node (tool executor)
-        def action_node(state: AgentState):
-            logger.debug("\n--- ACTION NODE ENTER ---")
-
+        # Define the tools node (tool executor)
+        def tools_node(state: AgentState):
             if not state.get("messages") or not hasattr(state["messages"][-1], "tool_calls"):
                 return {"messages": [AIMessage(content="No tool calls found in the last message.")]}
 
@@ -145,43 +144,25 @@ class RuoAgent:
                 result = self.execute_tool_call(tool_call, self.tools)
                 results.append(result)
 
-                # Special handling: summarize_chat returns structured response
-                if tool_call.get("name") == "summarize_chat":
-                    return {"tool_response": result}
-
             # Combine all results into one ToolMessage
             combined_result = "\n".join(str(r) for r in results)
 
-            return {"messages": [ToolMessage(content=combined_result, tool_call_id=tool_calls[0]["id"] if tool_calls else "unknown")]}
+            return {
+                "messages": [ToolMessage(content=combined_result, tool_call_id=tool_calls[0]["id"] if tool_calls else "unknown")],
+                "tool_response": combined_result,
+                "action": None,
+            }
 
         builder = StateGraph(AgentState)
 
         builder.add_node("agent", agent_node)
-        builder.add_node("action", action_node)
+        builder.add_node("tools", tools_node)
 
         builder.add_edge(START, "agent")
 
-        # Define a router for the agent's output
-        def route_agent_output(state: AgentState):
-            last_message = state["messages"][-1]
-            if last_message.tool_calls:
-                return "action"
-            else:
-                return END
+        builder.add_conditional_edges("agent", tools_condition)
 
-        builder.add_conditional_edges(
-            "agent",
-            route_agent_output,
-        )
-
-        builder.add_edge("action", "agent")
-        # builder.add_conditional_edges(
-        #     "action",
-        #     # If tool_response is present (from summarize_chat), go to END, otherwise go back to agent
-        #     lambda state: END if state.get("tool_response") else "agent",
-        # )
-
-        # Removed the builder.add_edge("assistant", END) as route_agent_output handles it
+        builder.add_edge("tools", "agent")
 
         # Compile graph
         graph = builder.compile(checkpointer=memory)

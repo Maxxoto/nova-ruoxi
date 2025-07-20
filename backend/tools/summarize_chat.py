@@ -4,7 +4,7 @@ from langchain_core.messages import SystemMessage, AnyMessage
 from backend.utils.logger_config import logger
 
 
-def summarize_chat_factory(agent):
+def summarize_chat_factory(agent, logging=True):
     @tool
     def summarize_chat(messages: list[AnyMessage]) -> str:
         """
@@ -17,10 +17,11 @@ def summarize_chat_factory(agent):
         """
         summarizer_agent_chain = agent
 
-        logger.info("\n=== SUMMARIZE_CHAT TOOL CALLED ===")
-        logger.info(f"{len(messages)} messages to summarize")
-        for i, msg in enumerate(messages):
-            logger.debug(f"{i + 1}. [{msg.type}] {msg.content[:50]}...")
+        if logging:
+            logger.info("\n=== SUMMARIZE_CHAT TOOL CALLED ===")
+            logger.info(f"{len(messages)} messages to summarize")
+            for i, msg in enumerate(messages):
+                logger.debug(f"{i + 1}. [{msg.type}] {msg.content[:50]}...")
 
         processed_chat_history = []
         for msg in messages:

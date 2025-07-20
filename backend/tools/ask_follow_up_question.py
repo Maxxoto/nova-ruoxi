@@ -1,32 +1,31 @@
 import json
+from typing import List
+from pydantic import BaseModel, Field
 from langchain_core.tools import tool
 from langchain_core.messages import SystemMessage, AnyMessage
 from backend.utils.logger_config import logger
+
 from backend.tools.summarize_chat import summarize_chat_factory
 
 
+class MessagesInput(BaseModel):
+    messages: List[AnyMessage] = Field(..., description="List of chat messages to evaluate")
+
+
 def ask_follow_up_question_factory(agent):
-    @tool
-    def ask_follow_up_question(messages: list[AnyMessage]):
-        """_summary_
-            This tool is used to ask follow up question if you feel that the previous question was not answered properly.
-        Args:
-            messages (list[AnyMessage]): The list of chat messages to ask follow up question.
-        Returns:
-            A follow up question based on the chat history.
+    @tool()
+    def ask_follow_up_question(messages: List[AnyMessage]) -> str:
         """
-        follow_up_agent_chain = agent
-        summarize_chat_tool = summarize_chat_factory(agent)
+        This tool is used to ask a follow-up question instead answering the user query.
 
-        logger.info("\n=== ASK_FOLLOW_UP_QUESTION TOOL CALLED ===")
-        logger.info(f"{len(messages)} messages to ask follow up question")
-        for i, msg in enumerate(messages):
-            logger.debug(f"{i + 1}. [{msg.type}] {msg.content[:50]}...")
-
-        # First, summarize the chat history using invoke() instead of __call__
-        summary_result = summarize_chat_tool.invoke(messages)
-        summary_data = json.loads(summary_result)
-        chat_summary = summary_data.get("summary", "No summary available.")
+        Args:
+            messages: The list of chat messages to summarize.
+         Returns:
+            A concise follow-up question based on the user query.
+        """
+        logger.info("ASK_FOLLOW_UP_QUESTION tool called with %d messages", len(messages))
+        for i, msg in enumerate(messages, 1):
+            logger.debug("%d. [%s] %.50s", i, getattr(msg, "type", "?"), getattr(msg, "content", "")[:50])
 
         processed_chat_history = []
         for msg in messages:
@@ -35,25 +34,27 @@ def ask_follow_up_question_factory(agent):
             else:
                 logger.warning(f"Invalid message format - {msg}")
 
+        # Summarize chat history
+        summarize_tool = summarize_chat_factory(agent, False)
+        summary_result = summarize_tool.invoke({"messages": messages})
+        summary = json.loads(summary_result).get("summary", "")
+
+        # Create prompt
         prompt = f"""
-            Based on the chat history and its summary, please ask a follow up question if you feel that the previous question was not answered properly.
-
-            Chat Summary:
-            {chat_summary}
-
-            Chat History:
-            {json.dumps([str(msg) for msg in processed_chat_history], indent=2)}
+            You are a helpful assistant. Based on the following chat history, ask a follow-up question to the user.
+            Chat history: {summary}
+            Follow-up question:
         """
+        logger.debug("Prompt: %s", prompt)
 
-        response = follow_up_agent_chain.invoke([SystemMessage(content=prompt)])
-
-        follow_up_question = ""
-        if isinstance(response, dict) and "messages" in response:
-            last_message = response["messages"][-1] if response["messages"] else None
-            follow_up_question = last_message.content if hasattr(last_message, "content") else str(last_message)
+        # Query agent
+        response = agent.invoke([SystemMessage(content=prompt)])
+        # Parse last AI message
+        if hasattr(response, "messages"):
+            follow_up = next((m.content for m in reversed(response.messages) if hasattr(m, "content")), "")
         else:
-            follow_up_question = str(response)
+            follow_up = str(response)
 
-        return json.dumps({"action": "ask_follow_up_question", "question": follow_up_question})
+        return json.dumps({"action": "ask_follow_up_question", "question": follow_up})
 
     return ask_follow_up_question
