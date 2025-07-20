@@ -108,28 +108,6 @@ Nova routes tasks to different models depending on complexity and context:
 > 🔌 Powered by **Groq** and **OpenRouter** for fast, reliable access to top-tier models.
 
 ---
-
-## 🧠 Ruoxi Persona System
-
-Nova's Ruoxi persona features adaptive personality traits, a robust personalization memory pipeline using `mem0`, and a personal RAG system using `Qdrant` with hybrid search.
-
-**Core Features**:
-- **Configurable Traits**: Adjust Ruoxi's personality (Calm, Curious, Empathetic)
-- **Short-term Memory**: Maintains context within conversations for seamless flow.
-- **Personalization Memory Pipeline (using Mem0)**:
-    - Remembers explicit user preferences and interaction patterns over time.
-- **Personal RAG System (using Qdrant with Hybrid Search)**:
-    - **Document Ingestion**: Seamlessly ingests personal documents, such as documentation and various files, to build a dynamic knowledge base.
-    - **Hybrid Search**: Leverages Qdrant for efficient semantic search and retrieval from ingested documents, combining vector and keyword search for accurate results.
-    - Tailors interactions based on a combination of active traits, conversational context, personalized memory, and retrieved information.
-
-**Coming Soon in Phase 2**:
-- Advanced Memory & Cognitive Profile (MCP) for deeper cognitive functions.
-- Full persona switching system for more versatile identity adoption.
-- Broader integration of agentic behaviors and deep personalization.
-
----
-
 ## 🗃️ Tech Stack
 
 | Component      | Technology / Service                              |
