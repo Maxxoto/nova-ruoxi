@@ -1,0 +1,60 @@
+body {
+    font-family: "sans serif", Arial, sans-serif;
+    background-color: #121212;
+    color: #FFFFFF;
+}
+
+.stApp {
+    background-color: #121212;
+}
+
+/* Header Styling */
+.header-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 0;
+    border-bottom: 1px solid #333333;
+    margin-bottom: 30px;
+}
+
+.header-logo {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    margin-right: 20px;
+}
+
+.header-title {
+    font-size: 3em;
+    color: #6200EE;
+    margin: 0;
+}
+
+.header-subtitle {
+    font-size: 1.2em;
+    color: #BBBBBB;
+    margin: 0;
+}
+
+/* Chat Message Styling */
+.chat-message {
+    padding: 10px 15px;
+    border-radius: 15px;
+    margin-bottom: 10px;
+    max-width: 70%;
+}
+
+.user-message {
+    background-color: #1E1E1E;
+    color: #FFFFFF;
+    align-self: flex-end;
+    margin-left: auto;
+}
+
+.assistant-message {
+    background-color: #2C2C2C;
+    color: #FFFFFF;
+    align-self: flex-start;
+    margin-right: auto;
+}
