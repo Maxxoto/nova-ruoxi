@@ -141,3 +141,4 @@ if prompt := st.chat_input("Type your message to Nova..."):
 
         except Exception as e:
             st.error(f"Error getting response: {str(e)}")
+
